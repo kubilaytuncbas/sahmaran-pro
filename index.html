@@ -354,8 +354,8 @@ button:active {
 .settings-panel h3 {
   margin: 0 0 15px 0;
   color: #4ade80;
-}
 
+}
 .setting-item {
   margin: 10px 0;
   display: flex;
@@ -896,6 +896,20 @@ button:active {
 <div id="achievementNotification" class="achievement-unlock-notification" style="display: none;"></div>
 
 <script>
+function loadJson(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function loadNumber(key, fallback = 0) {
+  const value = Number(localStorage.getItem(key));
+  return Number.isFinite(value) ? value : fallback;
+}
+
 // ================= VIBRATION API =================
 class VibrationManager {
   constructor() {
@@ -938,9 +952,9 @@ class TouchController {
   }
 
   setupTouchListeners() {
-    document.addEventListener('touchstart', (e) => this.handleTouchStart(e), false);
-    document.addEventListener('touchmove', (e) => this.handleTouchMove(e), false);
-    document.addEventListener('touchend', (e) => this.handleTouchEnd(e), false);
+    document.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: true });
+    document.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
+    document.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: true });
   }
 
   handleTouchStart(e) {
@@ -1144,7 +1158,7 @@ class PowerUpManager {
 // ================= LEADERBOARD SYSTEM =================
 class LeaderboardManager {
   constructor() {
-    this.entries = JSON.parse(localStorage.getItem('snakeLB')) || [];
+    this.entries = loadJson('snakeLB', []);
   }
 
   addEntry(name, score, level) {
@@ -1196,7 +1210,11 @@ class LeaderboardManager {
   getShareText() {
     const lastEntry = this.entries[0];
     if (!lastEntry) return '';
-    return `🐍 Snake Shahmaran PRO+\n🎮 Score: ${lastEntry.score}\n📈 Level: ${lastEntry.level}\n\nBeni geçebilir misin? 🔥`;
+    return `🐍 Snake Shahmaran PRO+
+🎮 Score: ${lastEntry.score}
+📈 Level: ${lastEntry.level}
+
+Beni geçebilir misin? 🔥`;
   }
 }
 
@@ -1307,7 +1325,7 @@ class AchievementManager {
   }
 
   loadAchievements() {
-    const data = JSON.parse(localStorage.getItem('snakeAchievements')) || {};
+    const data = loadJson('snakeAchievements', {});
     Object.keys(this.achievements).forEach(key => {
       if (data[key]) {
         this.achievements[key].unlocked = true;
@@ -1342,7 +1360,7 @@ class AchievementManager {
           <div class="achievement-info">
             <div class="achievement-name">${achievement.name}</div>
             <div class="achievement-description">${achievement.description}</div>
-            ${!unlocked ? `<div class="achievement-progress">🔒</div>` : `<div class="achievement-progress">✅</div>`}
+            ${!unlocked ? '<div class="achievement-progress">🔒</div>' : '<div class="achievement-progress">✅</div>'}
           </div>
         </div>
       `;
@@ -1364,7 +1382,12 @@ function openShareModal() {
   const lastScore = leaderboardManager.entries[0]?.score || score;
   const lastLevel = leaderboardManager.entries[0]?.level || level;
   
-  const text = `🐍 Snake Shahmaran PRO+\n🎮 Score: ${lastScore}\n📈 Level: ${lastLevel}\n\nBeni geçebilir misin? 🔥\nhttps://github.com/kubilaytuncbas/snake-shahmaran-pro`;
+  const text = `🐍 Snake Shahmaran PRO+
+🎮 Score: ${lastScore}
+📈 Level: ${lastLevel}
+
+Beni geçebilir misin? 🔥
+https://kubilaytuncbas.github.io/sahmaran-pro/`;
   
   document.getElementById('shareText').textContent = text;
   document.getElementById('shareModal').classList.add('active');
@@ -1397,6 +1420,8 @@ function copyToClipboard() {
   const text = getShareText();
   navigator.clipboard.writeText(text).then(() => {
     showNotification('📋 Copied!', 'success');
+  }).catch(() => {
+    showNotification('Copy failed', 'error');
   });
 }
 
@@ -1455,7 +1480,6 @@ let currentTheme = 'DARK';
 function initGame() {
   snake = [{x: 10, y: 10}];
   globalDirection = "RIGHT";
-  food = randomFood();
   obstacles = [];
   powerUps = [];
   powerUpManager.clear();
@@ -1463,9 +1487,18 @@ function initGame() {
   hp = 5;
   score = 0;
   level = 1;
-  gameSpeed = difficulties[document.getElementById('difficultySelect').value].gameSpeed;
+  const selectedDifficulty = difficulties[document.getElementById('difficultySelect').value];
+  gameSpeed = selectedDifficulty.gameSpeed;
 
-  highScore = localStorage.getItem("snakeHigh") || 0;
+  for (let i = 0; i < selectedDifficulty.initialObstacles; i++) {
+    spawnObstacle();
+  }
+
+  food = randomFood();
+
+  highScore = loadNumber("snakeHigh");
+  document.body.style.background = themes[currentTheme].bg;
+  canvas.style.background = themes[currentTheme].canvas;
 
   updateUI();
   leaderboardManager.render();
@@ -1573,7 +1606,8 @@ function randomFood() {
   do {
     newFood = {x: Math.floor(Math.random() * 20), y: Math.floor(Math.random() * 20)};
   } while (snake.some(s => s.x === newFood.x && s.y === newFood.y) || 
-           obstacles.some(o => o.x === newFood.x && o.y === newFood.y));
+           obstacles.some(o => o.x === newFood.x && o.y === newFood.y) ||
+           powerUps.some(p => p.x === newFood.x && p.y === newFood.y));
   return newFood;
 }
 
@@ -1582,7 +1616,9 @@ function spawnObstacle() {
   do {
     obstacle = {x: Math.floor(Math.random() * 20), y: Math.floor(Math.random() * 20)};
   } while (snake.some(s => s.x === obstacle.x && s.y === obstacle.y) || 
-           obstacles.some(o => o.x === obstacle.x && o.y === obstacle.y));
+           obstacles.some(o => o.x === obstacle.x && o.y === obstacle.y) ||
+           powerUps.some(p => p.x === obstacle.x && p.y === obstacle.y) ||
+           (food && food.x === obstacle.x && food.y === obstacle.y));
   obstacles.push(obstacle);
 }
 
@@ -1595,7 +1631,8 @@ function spawnPowerUp() {
       powerUp.y = Math.floor(Math.random() * 20);
       
       if (!snake.some(s => s.x === powerUp.x && s.y === powerUp.y) &&
-          !obstacles.some(o => o.x === powerUp.x && o.y === powerUp.y)) {
+          !obstacles.some(o => o.x === powerUp.x && o.y === powerUp.y) &&
+          !(food && food.x === powerUp.x && food.y === powerUp.y)) {
         powerUps.push(powerUp);
         return;
       }
@@ -1681,6 +1718,19 @@ function gameOver() {
 
 // ================= INPUT =================
 document.addEventListener("keydown", e => {
+  const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+  const activeElement = document.activeElement;
+  const isTypingField = activeElement && (
+    activeElement.tagName === "INPUT" ||
+    activeElement.tagName === "TEXTAREA" ||
+    activeElement.tagName === "SELECT" ||
+    activeElement.isContentEditable
+  );
+
+  if (!arrowKeys.includes(e.key) || isTypingField) return;
+
+  e.preventDefault();
+
   if (e.key === "ArrowUp" && globalDirection !== "DOWN") globalDirection = "UP";
   if (e.key === "ArrowDown" && globalDirection !== "UP") globalDirection = "DOWN";
   if (e.key === "ArrowLeft" && globalDirection !== "RIGHT") globalDirection = "LEFT";
@@ -1768,7 +1818,7 @@ function draw() {
   ctx.clearRect(0, 0, 400, 400);
 
   if (shakeTime > 0) {
-    canvas.style.transform = `translate(${(Math.random() - 0.5) * 10}px,${(Math.random() - 0.5) * 10}px)`;
+    canvas.style.transform = `translate(${(Math.random() - 0.5) * 10}px, ${(Math.random() - 0.5) * 10}px)`;
     shakeTime--;
   } else {
     canvas.style.transform = "translate(0,0)";
@@ -1829,9 +1879,11 @@ document.getElementById('vibrationToggle').addEventListener('change', (e) => {
 
 function changeDifficulty() {
   if (isRunning) {
-    showNotification('��️ After game ends', 'info');
+    showNotification('⚠️ After game ends', 'info');
     return;
   }
+  gameSpeed = difficulties[document.getElementById('difficultySelect').value].gameSpeed;
+  updateSpeed();
   showNotification('Difficulty changed!', 'success');
 }
 
@@ -1839,12 +1891,15 @@ function changeTheme() {
   currentTheme = document.getElementById('themeSelect').value;
   const theme = themes[currentTheme];
   document.body.style.background = theme.bg;
-  showNotification(`🎨 Theme!`, 'success');
+  canvas.style.background = theme.canvas;
+  showNotification('🎨 Theme changed!', 'success');
 }
 
 function resetStats() {
   if (confirm('Reset all data?')) {
-    localStorage.clear();
+    localStorage.removeItem('snakeHigh');
+    localStorage.removeItem('snakeLB');
+    localStorage.removeItem('snakeAchievements');
     highScore = 0;
     totalPowerUpsCollected = 0;
     leaderboardManager.entries = [];
